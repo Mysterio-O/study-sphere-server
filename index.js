@@ -279,6 +279,11 @@ async function run() {
                 const schedules = scheduleDetails.data
                 const existingSchedule = await scheduleCollection.findOne({ email: email });
                 console.log('existing schedule', existingSchedule);
+
+                /**
+                 * checking if the user has already a schedule or not
+                 * if they have, then update (add) new schedules
+                 */
                 if (existingSchedule) {
                     const result = await scheduleCollection.updateOne(
                         { email: email },
@@ -295,6 +300,10 @@ async function run() {
                         res.status(201).json(result);
                     }
                 }
+                /**
+                 * if the user doesn't have any schedule then
+                 * create a new one
+                 */
                 else {
                     const data = {
                         email: email,
@@ -316,6 +325,71 @@ async function run() {
                 res.status(500).json({ message: "internal server error adding schedules" });
             }
 
+        });
+
+        // get all schedules of specific user
+        app.get('/my-schedules', async (req, res) => {
+            const { email } = req.query;
+            if (!email) {
+                return res.status(404).json({ message: "user email not found" });
+            }
+            // console.log(email);
+
+            try {
+                const scheduleObject = await scheduleCollection.findOne({ email: email })
+
+                if (!scheduleObject) {
+                    return res.status(404).json({ message: "schedule not found" });
+                }
+                else {
+                    const schedules = scheduleObject?.schedules;
+                    // console.log(schedules);
+                    res.status(200).json(schedules)
+                }
+
+            }
+            catch (err) {
+                console.error("error getting schedules", err);
+                res.status(500).json({ message: "internal server error getting schedules" });
+            }
+
+        });
+
+        // delete specific schedule
+        app.delete('/delete-schedule', async (req, res) => {
+            const { email } = req.query;
+            const scheduleData = req.body;
+            if (!email) {
+                return res.status(404).json({ message: "user email not found" });
+            }
+            if (!scheduleData) {
+                return res.status(404).json({ message: "schedule data not found" });
+            }
+            console.log(email, scheduleData);
+            try {
+                const result = await scheduleCollection.updateOne(
+                    { email: email },
+                    {
+                        $pull: {
+                            schedules: {
+                                day: scheduleData.day,
+                                subjectName: scheduleData.subjectName,
+                                teacherName: scheduleData.teacherName,
+                                time: scheduleData.time
+                            }
+                        }
+                    }
+                );
+                console.log(result);
+                if (result.modifiedCount < 1) {
+                    return res.status(400).json({ message: "removing schedule failed" });
+                }
+                res.status(201).json(result);
+            }
+            catch (err) {
+                console.error("error removing schedule", err);
+                res.status(500).json({ message: "internal server error removing schedule data" });
+            }
         })
 
 
