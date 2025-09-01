@@ -586,6 +586,27 @@ async function run() {
             }
         });
 
+        // get user quiz progression data
+        app.get('/my-quiz-progression', async (req, res) => {
+            const { email } = req.query;
+            if (!email) {
+                return res.status(400).json({ message: "user email not found" });
+            }
+
+            try {
+                const progression = await quizProgressCollection.findOne({ userEmail: email });
+                if (!progression) {
+                    return res.status(404).json({ message: "no quiz data found in the database" });
+                }
+                res.status(200).json(progression)
+            }
+            catch (err) {
+                console.error("error getting quiz progression data", err);
+                res.status(500).json({ message: "internal server error getting quiz progress data" });
+            }
+
+        })
+
 
 
 
