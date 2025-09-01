@@ -28,6 +28,7 @@ const db = client.db('studysphereDB');
 const userCollection = db.collection('users');
 const subjectCollection = db.collection("subjects");
 const scheduleCollection = db.collection('schedules');
+const quizProgressCollection = db.collection('quizProgress');
 
 
 
@@ -422,29 +423,30 @@ async function run() {
 
                 if (questionType === "quiz") {
                     prompt = `Generate ${questionNumbers} multiple choice questions on "${topic}" for ${difficulty} level.
-Provide 4 options for each question and indicate the correct answer in this format:
+                        Provide 4 options for each question and indicate the correct answer in this format:
 
-Question: <question text>
-Options: A) ... B) ... C) ... D) ...
-Answer: <correct option>
+                        Question: <question text>
+                        Options: A) ... B) ... C) ... D) ...
+                        Answer: <correct option>
 
-Only return the questions in this format, nothing else.`;
-                } else if (questionType === "true-false") {
+                        Only return the questions in this format, nothing else.`;
+                }
+                else if (questionType === "true-false") {
                     prompt = `Generate ${questionNumbers} true/false questions on "${topic}" for ${difficulty} level.
-Format:
+                    Format:
 
-Question: <question text>
-Answer: True/False
+                    Question: <question text>
+                    Answer: True/False
 
-Only return the questions in this format, nothing else.`;
+                    Only return the questions in this format, nothing else.`;
                 } else if (questionType === "short-answer") {
                     prompt = `Generate ${questionNumbers} short-answer questions on "${topic}" for ${difficulty} level.
-Format:
+                    Format:
 
-Question: <question text>
-Answer: <short answer>
+                    Question: <question text>
+                    Answer: <short answer>
 
-Only return the questions in this format, nothing else.`;
+                    Only return the questions in this format, nothing else.`;
                 }
 
                 const result = await model.generateContent({
@@ -482,8 +484,8 @@ Only return the questions in this format, nothing else.`;
                 // Prepare verification prompt
                 const prompt = answersData.map(a =>
                     `Question: ${a.question}\nUserAnswer: ${a.userAnswer}\nRespond with CorrectAnswer and IsCorrect (true/false) like this format:
-CorrectAnswer: <correct answer>
-IsCorrect: <true/false>`
+            CorrectAnswer: <correct answer>
+            IsCorrect: <true/false>`
                 ).join("\n\n");
 
                 const result = await model.generateContent({
@@ -517,6 +519,72 @@ IsCorrect: <true/false>`
             }
         });
 
+
+        // quiz progress
+
+        // save progress
+        app.post("/save-quiz-progress", async (req, res) => {
+            const { email } = req.query;
+            const { quizType, topic, difficulty, questions } = req.body;
+
+            if (!email) {
+                return res.status(404).json({ message: "user email not found" });
+            }
+            if (!quizType || !topic || !difficulty || !questions) {
+                return res.status(404).json({ message: "quiz details missing. try again" });
+            }
+
+            try {
+                const solved = questions.length;
+                const correct = questions.filter(q => q.isCorrect).length;
+
+                const update = {
+                    $inc: {
+                        totalQuestionSolved: solved,
+                        totalCorrectAnswers: correct,
+                        [`byDifficulty.${difficulty}.solved`]: solved,
+                        [`byDifficulty.${difficulty}.correct`]: correct, // ✅ fixed
+                    },
+                    $push: {
+                        quizzes: {
+                            quizType,
+                            topic,
+                            difficulty,
+                            questions,
+                            submittedAt: new Date().toISOString(),
+                        },
+                    },
+                    $setOnInsert: {
+                        userEmail: email,
+                        createdAt: new Date().toISOString(),
+                    },
+                };
+
+                const result = await quizProgressCollection.updateOne(
+                    { userEmail: email },
+                    update,
+                    { upsert: true }
+                );
+
+                console.log("result from save progress", result);
+
+                // ✅ Proper success check
+                if (result.upsertedId || result.modifiedCount > 0) {
+                    return res
+                        .status(201)
+                        .json({ message: "quiz progress data saved successfully" });
+                }
+
+                return res
+                    .status(400)
+                    .json({ message: "no changes were made to quiz progression data" });
+            } catch (err) {
+                console.error("error saving quiz progress", err);
+                res
+                    .status(500)
+                    .json({ message: "internal server error saving quiz progress" });
+            }
+        });
 
 
 
