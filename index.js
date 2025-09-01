@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const app = express()
 const port = 3000;
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
 
 app.use(express.json());
 app.use(cors());
@@ -19,6 +21,8 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+// Initialize Gemini client
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const db = client.db('studysphereDB');
 const userCollection = db.collection('users');
@@ -390,7 +394,134 @@ async function run() {
                 console.error("error removing schedule", err);
                 res.status(500).json({ message: "internal server error removing schedule data" });
             }
-        })
+        });
+
+
+
+
+
+
+        // generate questions
+        app.post("/question-generator", async (req, res) => {
+            const { email } = req.query;
+            const { data: questionData } = req.body;
+
+            if (!email) return res.status(404).json({ message: "User email not found" });
+            if (!questionData) return res.status(404).json({ message: "Question data not found" });
+
+            try {
+                const { questionType, topic, questionNumbers, difficulty } = questionData;
+
+                if (!["quiz", "true-false", "short-answer"].includes(questionType)) {
+                    return res.status(400).json({ message: "Invalid question type" });
+                }
+
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+                let prompt = "";
+
+                if (questionType === "quiz") {
+                    prompt = `Generate ${questionNumbers} multiple choice questions on "${topic}" for ${difficulty} level.
+Provide 4 options for each question and indicate the correct answer in this format:
+
+Question: <question text>
+Options: A) ... B) ... C) ... D) ...
+Answer: <correct option>
+
+Only return the questions in this format, nothing else.`;
+                } else if (questionType === "true-false") {
+                    prompt = `Generate ${questionNumbers} true/false questions on "${topic}" for ${difficulty} level.
+Format:
+
+Question: <question text>
+Answer: True/False
+
+Only return the questions in this format, nothing else.`;
+                } else if (questionType === "short-answer") {
+                    prompt = `Generate ${questionNumbers} short-answer questions on "${topic}" for ${difficulty} level.
+Format:
+
+Question: <question text>
+Answer: <short answer>
+
+Only return the questions in this format, nothing else.`;
+                }
+
+                const result = await model.generateContent({
+                    contents: [
+                        { role: "user", parts: [{ text: prompt }] }
+                    ]
+                });
+
+                const responseText = result.response.text();
+
+                return res.json({
+                    email,
+                    questionType,
+                    raw: responseText
+                });
+
+            } catch (error) {
+                console.error("Error generating questions:", error);
+                return res.status(500).json({ message: "Error generating questions", error });
+            }
+        });
+
+
+        // verify answers
+        app.post("/verify-answers", async (req, res) => {
+            const { email } = req.query;
+            const { data: answersData } = req.body;
+
+            if (!email) return res.status(404).json({ message: "User email not found" });
+            if (!answersData) return res.status(404).json({ message: "Answer data not found" });
+
+            try {
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+                // Prepare verification prompt
+                const prompt = answersData.map(a =>
+                    `Question: ${a.question}\nUserAnswer: ${a.userAnswer}\nRespond with CorrectAnswer and IsCorrect (true/false) like this format:
+CorrectAnswer: <correct answer>
+IsCorrect: <true/false>`
+                ).join("\n\n");
+
+                const result = await model.generateContent({
+                    contents: [{ role: "user", parts: [{ text: prompt }] }]
+                });
+
+                const aiRawText = result.response.text();
+                console.log("AI Raw Response:", aiRawText);
+
+                // Split responses by double newlines
+                const aiResponses = aiRawText.split("\n\n").filter(Boolean);
+
+                const verifiedResults = answersData.map((q, i) => {
+                    const resp = aiResponses[i] || "";
+                    const correctAnswerMatch = resp.match(/CorrectAnswer:\s*(.*)/i);
+                    const isCorrectMatch = resp.match(/IsCorrect:\s*(true|false)/i);
+
+                    return {
+                        question: q.question,
+                        userAnswer: q.userAnswer,
+                        correctAnswer: correctAnswerMatch ? correctAnswerMatch[1].trim() : null,
+                        isCorrect: isCorrectMatch ? isCorrectMatch[1].toLowerCase() === "true" : false
+                    };
+                });
+
+                return res.json({ results: verifiedResults });
+
+            } catch (error) {
+                console.error("Error verifying answers:", error);
+                return res.status(500).json({ message: "Error verifying answers", error });
+            }
+        });
+
+
+
+
+
+
 
 
         // Send a ping to confirm a successful connection
