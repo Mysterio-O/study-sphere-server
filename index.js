@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const app = express()
@@ -29,6 +29,7 @@ const userCollection = db.collection('users');
 const subjectCollection = db.collection("subjects");
 const scheduleCollection = db.collection('schedules');
 const quizProgressCollection = db.collection('quizProgress');
+const studyPlannerCollection = db.collection('studyPlanner');
 
 
 
@@ -605,7 +606,115 @@ async function run() {
                 res.status(500).json({ message: "internal server error getting quiz progress data" });
             }
 
+        });
+
+
+
+        // study planner api
+
+        // add a new plan
+        app.post('/study-plans', async (req, res) => {
+            const { email } = req.query;
+            const plan = req.body;
+            console.log(plan);
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            if (!plan) return res.status(400).json({ message: "plan data not found" });
+
+            try {
+                const finalPlan = {
+                    userEmail: email,
+                    ...plan,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }
+                const result = await studyPlannerCollection.insertOne(finalPlan);
+                if (result.insertedId) {
+                    return res.status(201).json(result);
+                } else {
+                    res.status(400).json({ message: "failed to add new study plan" });
+                }
+            }
+            catch (err) {
+                console.error('error adding new study plan', err);
+                res.status(500).json({ message: "internal server error adding new study plan" });
+            }
+
+        });
+
+        // get study plans
+        app.get('/study-plans', async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+
+            try {
+                const plans = await studyPlannerCollection.find({ userEmail: email }).toArray();
+
+                if (plans) {
+                    return res.status(200).json(plans)
+                } else {
+                    res.status(404).json({ message: "no plans found with this email" })
+                }
+            }
+            catch (err) {
+                console.error("error getting study plan data", err);
+                res.status(500).json({ message: "internal server error getting study plan data" });
+            }
+
+        });
+
+        // update plan
+        app.put('/study-plans/:id', async (req, res) => {
+            const { email } = req.query;
+            const { id } = req.params;
+            const update = req.body;
+            console.log(update);
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            if (!id) return res.status(400).json({ message: "plan id not found" });
+            if (!update) return res.status(400).json({ message: "updated doc not found" });
+
+            try {
+                const result = await studyPlannerCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { ...update, updatedAt: new Date().toISOString() } }
+                );
+                console.log(result);
+                if (result.modifiedCount > 0) {
+                    return res.status(201).json(result);
+                }
+                else {
+                    res.status(400).json({ message: "failed to update study plan" })
+                }
+            }
+            catch (err) {
+                console.error("error updating study plan", err);
+                res.status(500).json({ message: "internal server error updating study plan" });
+            }
+
         })
+
+        // delete study plan
+        app.delete('/study-plans/:id', async (req, res) => {
+            const { email } = req.query;
+            const { id } = req.params;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            if (!id) return res.status(400).json({ message: "plan id not found" });
+
+            try {
+                const result = await studyPlannerCollection.deleteOne({ _id: new ObjectId(id) });
+                if (result.deletedCount > 0) {
+                    return res.status(201).json(result);
+                }
+                else {
+                    res.status(400).json({ message: "failed to delete study plan" });
+                }
+            }
+            catch (err) {
+                console.error('error deleting study plan', err);
+                res.status(500).json({ message: "internal server error deleting study plan" });
+            }
+
+        })
+
 
 
 
