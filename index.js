@@ -30,6 +30,7 @@ const subjectCollection = db.collection("subjects");
 const scheduleCollection = db.collection('schedules');
 const quizProgressCollection = db.collection('quizProgress');
 const studyPlannerCollection = db.collection('studyPlanner');
+const walletCollection = db.collection("wallet");
 
 
 
@@ -38,6 +39,7 @@ async function run() {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
 
+        // user apis
         // create user
         app.post("/create-user", async (req, res) => {
             const userData = req.body;
@@ -70,6 +72,53 @@ async function run() {
             }
         });
 
+        // upload cover api
+        app.patch('/upload-cover', async (req, res) => {
+            const { email } = req.query;
+            const { coverUrl } = req.body;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            if (!coverUrl) return res.status(400).json({ message: "cover url not found" });
+            console.log(email, coverUrl);
+            try {
+                const result = await userCollection.updateOne(
+                    { email: email },
+                    {
+                        $set: {
+                            coverURL: coverUrl
+                        }
+                    },
+                    { upsert: true }
+                );
+                console.log(result);
+                if (result.modifiedCount > 0) {
+                    return res.status(201).json(result);
+                }
+                res.status(400).json({ message: "cover update failed" });
+            }
+            catch (err) {
+                console.error('error updating cover image', err);
+                res.status(500).json({ message: "internal server error updating cover image" });
+            }
+        });
+
+        // get cover photo
+        app.get('/cover-photo', async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            try {
+                const user = await userCollection.findOne({ email: email });
+                if (user) {
+                    const coverUrl = user?.coverURL || ''
+                    return res.status(200).json(coverUrl)
+                } else {
+                    res.status(404).json({ message: "user with this email not found" });
+                }
+            }
+            catch (err) {
+                console.error('error getting cover image', err);
+                res.status(500).json({ message: "internal server error while getting user cover url" });
+            }
+        })
 
         // subjects api
 
@@ -715,6 +764,97 @@ async function run() {
 
         })
 
+
+
+
+        // wallet apis
+
+        // add income
+        app.post("/wallet/income", async (req, res) => {
+            const { email } = req.query;
+            const walletData = req.body;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            if (!walletData) return res.status(400).json({ message: "wallet income data not found" });
+            // console.log(email, walletData);
+            try {
+                const { amount, source, date } = walletData;
+                const result = await walletCollection.updateOne(
+                    { email: email },
+                    {
+                        $inc: { totalAmount: amount },
+                        $push: {
+                            income: { amount, source, date }
+                        }
+                    },
+                    { upsert: true }
+                );
+                console.log("result from add income", result);
+                if (result.modifiedCount > 0 || result.upsertedCount > 0) {
+                    return res.status(201).json(result);
+                }
+                else {
+                    res.status(400).json({ message: "income add failed" });
+                }
+
+            }
+            catch (err) {
+                console.error("error adding income", err);
+                res.status(500).json({ message: "internal server error adding income" });
+            }
+        });
+
+        // get wallet data
+        app.get('/wallet', async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+
+            try {
+                const result = await walletCollection.findOne({ email: email });
+                if (!result) {
+                    return res.status(404).json({ message: "no wallet found with this email" });
+                }
+                res.status(200).json(result);
+            }
+            catch (err) {
+                console.error("error getting wallet data", err);
+                res.status(500).json({ message: "internal server error getting wallet data" });
+            }
+
+        });
+
+        // add expenses
+        app.post('/wallet/expense', async (req, res) => {
+            const { email } = req.query;
+            const expenseData = req.body;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            if (!expenseData) return res.status(400).json({ message: "expense data not found" });
+
+            // console.log(email, expenseData);
+
+            try {
+                const amount = Number(expenseData.amount);
+                const { category, date } = expenseData;
+                const result = await walletCollection.updateOne(
+                    { email: email },
+                    {
+                        $inc: { totalAmount: -amount },
+                        $push: {
+                            expense: { amount, category, date }
+                        }
+                    }
+                );
+                console.log(result);
+                if (result.modifiedCount < 1) {
+                    return res.status(400).json({ message: "add expense failed" });
+                }
+                res.status(201).json(result)
+            }
+            catch (err) {
+                console.error("error adding expense", err);
+                res.status(500).json({ message: "internal server error adding expense" });
+            }
+
+        })
 
 
 
