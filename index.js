@@ -125,6 +125,8 @@ async function run() {
 
 
         // post apis
+
+        // create new post
         app.post('/create-post', async (req, res) => {
             const { email } = req.query;
             const { postData } = req.body;
@@ -148,22 +150,95 @@ async function run() {
 
         // get post api
         app.get('/my-posts', async (req, res) => {
-            const { email } = req.query;
+            const { email, page = 1, limit = 10 } = req.query;
             if (!email) return res.status(400).json({ message: "user email not found" });
 
+            const pageNum = parseInt(page, 10);
+            const limitNum = parseInt(limit, 10);
+
             try {
-                const posts = await postCollection.find(
-                    { "author.email": email }
-                ).toArray();
-                if (!posts) return res.status(404).json({ message: "no posts found with this email" });
-                else res.status(200).json(posts);
-            }
-            catch (err) {
+                const posts = await postCollection
+                    .find({ "author.email": email })
+                    .sort({ createdAt: -1 }) // newest first
+                    .skip((pageNum - 1) * limitNum)
+                    .limit(limitNum)
+                    .toArray();
+
+                if (!posts) return res.status(404).json({ message: "no post found in this account" });
+
+                const total = await postCollection.countDocuments({ "author.email": email });
+
+                res.status(200).json({
+                    posts,
+                    total,
+                    page: pageNum,
+                    totalPages: Math.ceil(total / limitNum)
+                });
+            } catch (err) {
                 console.error("error getting user posts", err);
                 res.status(500).json({ message: "internal server error while getting user posts" });
             }
+        });
 
+        // update existing post
+        app.patch('/update-post', async (req, res) => {
+            const { email } = req.query;
+            const { data } = req.body;
+            if (!email) return res.status(400).json({ message: 'user email not found' });
+            if (!data) return res.status(400).json({ message: 'updated data not found' });
+            try {
+                const { id, newImage, newText } = data;
+                if (!id) return res.status(400).json({ message: "post id not found" });
+
+                let update = { $set: {} };
+                if (newImage) {
+                    update.$set.image = newImage;
+                }
+                if (newText) {
+                    update.$set.text = newText;
+                }
+
+                if (Object.keys(update.$set).length === 0) {
+                    return res.status(400).json({ message: 'no fields to update' });
+                }
+
+                const result = await postCollection.updateOne(
+                    { _id: new ObjectId(id), 'author.email': email },
+                    update
+                );
+                console.log(result);
+
+                if (result.modifiedCount < 1) {
+                    return res.status(404).json({ message: "post not found or update failed" });
+                }
+                res.status(201).json(result);
+            }
+            catch (err) {
+                console.error('error updating post', err);
+                res.status(500).json({ message: "internal server error updating post" });
+            }
+        });
+
+        // delete post 
+        app.delete('/delete-post', async (req, res) => {
+            const { id, email } = req.query;
+            if (!id) return res.status(400).json({ message: "post id not found" });
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            try {
+                const result = await postCollection.deleteOne(
+                    { _id: new ObjectId(id), 'author.email': email }
+                );
+                if (result.deletedCount < 1) {
+                    return res.status(400).json({ message: "post delete failed. try again" });
+                }
+                res.status(204).json(result);
+            }
+            catch (err) {
+                console.error("error deleting post", err);
+                res.status(500).json({ message: "internal server error deleting post" });
+            }
         })
+
 
 
 
