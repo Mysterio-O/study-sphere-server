@@ -31,6 +31,7 @@ const scheduleCollection = db.collection('schedules');
 const quizProgressCollection = db.collection('quizProgress');
 const studyPlannerCollection = db.collection('studyPlanner');
 const walletCollection = db.collection("wallet");
+const postCollection = db.collection('posts');
 
 
 
@@ -119,6 +120,59 @@ async function run() {
                 res.status(500).json({ message: "internal server error while getting user cover url" });
             }
         })
+
+
+
+
+        // post apis
+        app.post('/create-post', async (req, res) => {
+            const { email } = req.query;
+            const { postData } = req.body;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+            if (!postData) return res.status(400).json({ message: "post data not found" });
+
+            console.log(postData);
+
+            try {
+                const result = await postCollection.insertOne(postData);
+                console.log(result);
+                if (!result.insertedId) return res.status(400).json({ message: "post upload failed" });
+                else res.status(201).json(result);
+            }
+            catch (err) {
+                console.error("error uploading new post", err);
+                res.status(500).json({ message: "internal server error uploading new post" });
+            }
+
+        });
+
+        // get post api
+        app.get('/my-posts', async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+
+            try {
+                const posts = await postCollection.find(
+                    { "author.email": email }
+                ).toArray();
+                if (!posts) return res.status(404).json({ message: "no posts found with this email" });
+                else res.status(200).json(posts);
+            }
+            catch (err) {
+                console.error("error getting user posts", err);
+                res.status(500).json({ message: "internal server error while getting user posts" });
+            }
+
+        })
+
+
+
+
+
+
+
+
+
 
         // subjects api
 
