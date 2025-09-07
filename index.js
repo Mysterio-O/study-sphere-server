@@ -1014,6 +1014,36 @@ async function run() {
                 res.status(500).json({ message: "internal server error adding expense" });
             }
 
+        });
+
+
+
+        // all post for newsfeed
+        app.get("/all-posts", async (req, res) => {
+            const { page = 1, limit = 10 } = req.query;
+            try {
+                const pageCount = parseInt(page);
+                const limitCount = parseInt(limit);
+                const skip = (pageCount - 1) * limitCount;
+                const posts = await postCollection.find({})
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limitCount)
+                    .toArray();
+
+                const total = await postCollection.countDocuments();
+
+                if (!posts || posts.length === 0) {
+                    return res.status(404).json({ message: "posts not found. try again" })
+                }
+                res.status(200).json({ posts, total });
+
+            }
+            catch (err) {
+                console.error("error getting all posts", err);
+                res.status(500).json({ message: "internal server error getting all posts" });
+            }
+
         })
 
 
