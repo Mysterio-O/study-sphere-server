@@ -2,6 +2,7 @@ require('dotenv').config();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
+const admin = require("firebase-admin");
 const app = express()
 const port = 3000;
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -11,6 +12,13 @@ app.use(express.json());
 app.use(cors());
 
 // console.log(process.env.MONGO_URI);
+
+const serviceAccount = require('./study-sphere-firebase-adminsdk.json');
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
+
 
 const uri = 'mongodb+srv://skrabbi019_db_user:OCaDscD4P7qyl6SG@cluster0.xrkj8gk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
 
@@ -39,6 +47,28 @@ async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
+
+        // middleware
+        const verifyFBToken = async (req, res, next) => {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) return res.status(401).join({ message: "unauthorized access" });
+
+            const token = authHeader.split(' ')[1];
+            if (!token) return res.status(403).json({ message: "forbidden access" });
+
+            try {
+                const decoded = await admin.auth().verifyIdToken(token);
+                req.decoded = decoded;
+                next()
+            }
+            catch (err) {
+                res.status(500).json({ message: "internal server error while decoding firebase token" });
+            }
+
+
+        }
+
+
 
         // user apis
         // create user
@@ -74,7 +104,7 @@ async function run() {
         });
 
         // upload cover api
-        app.patch('/upload-cover', async (req, res) => {
+        app.patch('/upload-cover', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const { coverUrl } = req.body;
             if (!email) return res.status(400).json({ message: "user email not found" });
@@ -127,7 +157,7 @@ async function run() {
         // post apis
 
         // create new post
-        app.post('/create-post', async (req, res) => {
+        app.post('/create-post', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const { postData } = req.body;
             if (!email) return res.status(400).json({ message: "user email not found" });
@@ -149,7 +179,7 @@ async function run() {
         });
 
         // get post api
-        app.get('/my-posts', async (req, res) => {
+        app.get('/my-posts', verifyFBToken, async (req, res) => {
             const { email, page = 1, limit = 10 } = req.query;
             if (!email) return res.status(400).json({ message: "user email not found" });
 
@@ -181,23 +211,24 @@ async function run() {
         });
 
         // update existing post
-        app.patch('/update-post', async (req, res) => {
+        app.patch('/update-post', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const { data } = req.body;
             if (!email) return res.status(400).json({ message: 'user email not found' });
             if (!data) return res.status(400).json({ message: 'updated data not found' });
             try {
-                const { id, newImage, newText } = data;
+                const { id, newImageUrl, newText } = data;
+                console.log(data);
                 if (!id) return res.status(400).json({ message: "post id not found" });
 
                 let update = { $set: {} };
-                if (newImage) {
-                    update.$set.image = newImage;
+                if (newImageUrl) {
+                    update.$set.image = newImageUrl;
                 }
                 if (newText) {
                     update.$set.text = newText;
                 }
-
+                console.log('update', update);
                 if (Object.keys(update.$set).length === 0) {
                     return res.status(400).json({ message: 'no fields to update' });
                 }
@@ -220,7 +251,7 @@ async function run() {
         });
 
         // delete post 
-        app.delete('/delete-post', async (req, res) => {
+        app.delete('/delete-post', verifyFBToken, async (req, res) => {
             const { id, email } = req.query;
             if (!id) return res.status(400).json({ message: "post id not found" });
             if (!email) return res.status(400).json({ message: "user email not found" });
@@ -252,7 +283,7 @@ async function run() {
         // subjects api
 
         // add subjects 
-        app.post('/add-subjects', async (req, res) => {
+        app.post('/add-subjects', verifyFBToken, async (req, res) => {
             const data = req.body;
             const { email } = req.query;
             console.log(email);
@@ -301,7 +332,7 @@ async function run() {
         });
 
         // get user specific subjects
-        app.get('/my-subjects', async (req, res) => {
+        app.get('/my-subjects', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             // console.log(email);
             if (!email) {
@@ -337,7 +368,7 @@ async function run() {
         });
 
         // delete subject
-        app.delete('/delete-subject', async (req, res) => {
+        app.delete('/delete-subject', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const subject = req.body;
             if (!email) {
@@ -376,7 +407,7 @@ async function run() {
         });
 
         // update subject
-        app.patch('/update-subject', async (req, res) => {
+        app.patch('/update-subject', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const data = req.body;
             if (!email) {
@@ -448,7 +479,7 @@ async function run() {
         // schedule apis
 
         // add schedule
-        app.post('/add-schedule', async (req, res) => {
+        app.post('/add-schedule', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const scheduleDetails = req.body;
             if (!email) {
@@ -512,7 +543,7 @@ async function run() {
         });
 
         // get all schedules of specific user
-        app.get('/my-schedules', async (req, res) => {
+        app.get('/my-schedules', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             if (!email) {
                 return res.status(404).json({ message: "user email not found" });
@@ -540,7 +571,7 @@ async function run() {
         });
 
         // delete specific schedule
-        app.delete('/delete-schedule', async (req, res) => {
+        app.delete('/delete-schedule', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const scheduleData = req.body;
             if (!email) {
@@ -582,7 +613,7 @@ async function run() {
 
 
         // generate questions
-        app.post("/question-generator", async (req, res) => {
+        app.post("/question-generator", verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const { data: questionData } = req.body;
 
@@ -650,7 +681,7 @@ async function run() {
 
 
         // verify answers
-        app.post("/verify-answers", async (req, res) => {
+        app.post("/verify-answers", verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const { data: answersData } = req.body;
 
@@ -702,7 +733,7 @@ async function run() {
         // quiz progress
 
         // save progress
-        app.post("/save-quiz-progress", async (req, res) => {
+        app.post("/save-quiz-progress", verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const { quizType, topic, difficulty, questions } = req.body;
 
@@ -766,7 +797,7 @@ async function run() {
         });
 
         // get user quiz progression data
-        app.get('/my-quiz-progression', async (req, res) => {
+        app.get('/my-quiz-progression', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             if (!email) {
                 return res.status(400).json({ message: "user email not found" });
@@ -791,7 +822,7 @@ async function run() {
         // study planner api
 
         // add a new plan
-        app.post('/study-plans', async (req, res) => {
+        app.post('/study-plans', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const plan = req.body;
             console.log(plan);
@@ -820,7 +851,7 @@ async function run() {
         });
 
         // get study plans
-        app.get('/study-plans', async (req, res) => {
+        app.get('/study-plans', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             if (!email) return res.status(400).json({ message: "user email not found" });
 
@@ -841,7 +872,7 @@ async function run() {
         });
 
         // update plan
-        app.put('/study-plans/:id', async (req, res) => {
+        app.put('/study-plans/:id', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const { id } = req.params;
             const update = req.body;
@@ -871,7 +902,7 @@ async function run() {
         })
 
         // delete study plan
-        app.delete('/study-plans/:id', async (req, res) => {
+        app.delete('/study-plans/:id', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const { id } = req.params;
             if (!email) return res.status(400).json({ message: "user email not found" });
@@ -899,7 +930,7 @@ async function run() {
         // wallet apis
 
         // add income
-        app.post("/wallet/income", async (req, res) => {
+        app.post("/wallet/income", verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const walletData = req.body;
             if (!email) return res.status(400).json({ message: "user email not found" });
@@ -933,7 +964,7 @@ async function run() {
         });
 
         // get wallet data
-        app.get('/wallet', async (req, res) => {
+        app.get('/wallet', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             if (!email) return res.status(400).json({ message: "user email not found" });
 
@@ -952,7 +983,7 @@ async function run() {
         });
 
         // add expenses
-        app.post('/wallet/expense', async (req, res) => {
+        app.post('/wallet/expense', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const expenseData = req.body;
             if (!email) return res.status(400).json({ message: "user email not found" });
