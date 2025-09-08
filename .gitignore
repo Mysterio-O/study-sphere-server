@@ -1,3 +1,4 @@
 node_modules
 .env
 study-sphere-firebase-adminsdk.json
+.vercel
