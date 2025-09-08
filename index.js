@@ -268,8 +268,179 @@ async function run() {
                 console.error("error deleting post", err);
                 res.status(500).json({ message: "internal server error deleting post" });
             }
-        })
+        });
 
+        // like and unlike post api
+        app.patch('/manage-like', verifyFBToken, async (req, res) => {
+            const { id, email } = req.query;
+            if (!id) return res.status(400).json({ message: "post id not found" });
+            if (!email) return res.status(400).json({ message: "user email not found" });
+
+            try {
+                const post = await postCollection.findOne({ _id: new ObjectId(id) });
+                const alreadyLiked = post?.likedBy?.includes(email);
+                if (alreadyLiked) {
+                    const result = await postCollection.updateOne(
+                        { _id: new ObjectId(id) },
+                        {
+                            $pull: { likedBy: email }
+                        }
+                    );
+                    return res.status(201).json(result);
+                }
+                else {
+                    const result = await postCollection.updateOne(
+                        { _id: new ObjectId(id) },
+                        {
+                            $push: { likedBy: email }
+                        },
+                        { upsert: true }
+                    );
+                    return res.status(201).json(result);
+                }
+            }
+            catch (err) {
+                console.error("error liking or disliking post", err);
+                res.status(500).json({ message: "internal server error liking or disliking post" });
+            }
+
+        });
+
+        // get total likes 
+        app.get('/total-likes', verifyFBToken, async (req, res) => {
+            const { id } = req.query;
+            if (!id) return res.status(400).json({ message: "post id not found" });
+
+            try {
+                const post = await postCollection.findOne({ _id: new ObjectId(id) });
+                if (!post) return res.status(404).json({ message: "post not found" });
+
+                res.status(200).json(post?.likedBy || []);
+
+            }
+            catch (err) {
+                console.error("error getting likes", err);
+                res.status(500).json({ message: "internal server error getting likes" });
+            }
+
+        });
+
+        // get comments
+        app.get('/all-comments', verifyFBToken, async (req, res) => {
+            const { id } = req.query;
+            if (!id) return res.status(400).json({ message: "post id not found" });
+
+            try {
+                const post = await postCollection.findOne({ _id: new ObjectId(id) });
+                if (!post) return res.status(404).json({ message: "post not found" });
+                const comments = post?.comments || [];
+                res.status(200).json(comments);
+            }
+            catch (err) {
+                console.error("error getting post comments", err);
+                res.status(500).json({ message: "error getting comments" });
+            }
+
+        });
+
+        // add comment
+        app.post('/add-comment', verifyFBToken, async (req, res) => {
+            const { id } = req.query;
+            const commentData = req.body;
+            if (!id) return res.status(400).json({ message: "post id not found" });
+            if (!commentData) return res.status(400).json({ message: "comment body not found" });
+            // console.log(id, commentData);
+
+            try {
+                const post = await postCollection.findOne({ _id: new ObjectId(id) });
+                if (!post) return res.status(404).json({ message: "post not found" });
+
+                const comment = {
+                    ...commentData,
+                    _id: new ObjectId(),
+                    commentedAt: new Date().toISOString()
+                };
+
+                const result = await postCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    {
+                        $push: { comments: comment }
+                    },
+                    { upsert: true }
+                );
+                console.log(result);
+                res.status(201).json(result);
+
+            }
+            catch (err) {
+                console.error("error adding new comment", err);
+                res.status(500).json({ message: "internal server error adding new comment" });
+            }
+
+        });
+
+        // edit comment
+        app.patch('/edit-comment', verifyFBToken, async (req, res) => {
+            console.log('clicked');
+            const { postId } = req.query;
+            const commentData = req.body;
+            console.log(postId, commentData);
+            if (!postId) return res.status(400).json({ message: "post id not found" });
+            if (!commentData) return res.status(400).json({ message: "comment data not found" });
+
+            try {
+                const { id, editedText } = commentData;
+                if (!id || !editedText) return res.status(400).json({ message: "comment data missing" });
+
+                const result = await postCollection.updateOne(
+                    { _id: new ObjectId(postId), "comments._id": new ObjectId(id) },
+                    {
+                        $set: {
+                            "comments.$.text": editedText,
+                            "comments.$.editedAt": new Date().toISOString()
+                        }
+                    }
+                );
+                console.log(result);
+                if (result.modifiedCount === 0) {
+                    return res.status(404).json({ message: "comment not found or network error. try again" });
+                }
+                res.status(201).json(result);
+
+            }
+            catch (err) {
+                console.error('error editing comment', err);
+                res.status(500).json({ message: "internal server error editing comment" });
+            }
+
+        });
+
+        // delete comment
+        app.delete('/delete-comment', verifyFBToken, async (req, res) => {
+            const { postId, commentId } = req.query;
+            if (!postId) return res.status(400).json({ message: "post id not found" });
+            if (!commentId) return res.status(400).json({ message: "comment id not found" });
+
+            try {
+                const result = await postCollection.updateOne(
+                    { _id: new ObjectId(postId) },
+                    {
+                        $pull: {
+                            comments: { _id: new ObjectId(commentId) }
+                        }
+                    }
+                );
+                if (result.modifiedCount === 0) {
+                    return res.status(404).json({ message: "comment not found or network failed. try again." });
+                }
+                res.send(201).json(result);
+            }
+            catch (err) {
+                console.error('error deleting comment', err);
+                res.status(500).json({ message: "internal server error deleting comment" });
+            }
+
+        })
 
 
 
@@ -1036,7 +1207,7 @@ async function run() {
                 if (!posts || posts.length === 0) {
                     return res.status(404).json({ message: "posts not found. try again" })
                 }
-                res.status(200).json({ posts, total });
+                res.status(200).json({ posts, totalPages: Math.ceil(total / limitCount) });
 
             }
             catch (err) {
