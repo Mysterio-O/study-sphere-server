@@ -162,7 +162,7 @@ async function run() {
             const { coverUrl } = req.body;
             if (!email) return res.status(400).json({ message: "user email not found" });
             if (!coverUrl) return res.status(400).json({ message: "cover url not found" });
-            console.log(email, coverUrl);
+            // console.log(email, coverUrl);
             try {
                 const result = await userCollection.updateOne(
                     { email: email },
@@ -173,7 +173,7 @@ async function run() {
                     },
                     { upsert: true }
                 );
-                console.log(result);
+                // console.log(result);
                 if (result.modifiedCount > 0) {
                     return res.status(201).json(result);
                 }
@@ -334,11 +334,11 @@ async function run() {
             if (!email) return res.status(400).json({ message: "user email not found" });
             if (!postData) return res.status(400).json({ message: "post data not found" });
 
-            console.log(postData);
+            // console.log(postData);
 
             try {
                 const result = await postCollection.insertOne(postData);
-                console.log(result);
+                // console.log(result);
                 if (!result.insertedId) return res.status(400).json({ message: "post upload failed" });
                 else res.status(201).json(result);
             }
@@ -389,7 +389,7 @@ async function run() {
             if (!data) return res.status(400).json({ message: 'updated data not found' });
             try {
                 const { id, newImageUrl, newText } = data;
-                console.log(data);
+                // console.log(data);
                 if (!id) return res.status(400).json({ message: "post id not found" });
 
                 let update = { $set: {} };
@@ -399,7 +399,7 @@ async function run() {
                 if (newText) {
                     update.$set.text = newText;
                 }
-                console.log('update', update);
+                // console.log('update', update);
                 if (Object.keys(update.$set).length === 0) {
                     return res.status(400).json({ message: 'no fields to update' });
                 }
@@ -408,7 +408,7 @@ async function run() {
                     { _id: new ObjectId(id), 'author.email': email },
                     update
                 );
-                console.log(result);
+                // console.log(result);
 
                 if (result.modifiedCount < 1) {
                     return res.status(404).json({ message: "post not found or update failed" });
@@ -539,7 +539,7 @@ async function run() {
                     },
                     { upsert: true }
                 );
-                console.log(result);
+                // console.log(result);
                 res.status(201).json(result);
 
             }
@@ -552,10 +552,10 @@ async function run() {
 
         // edit comment
         app.patch('/edit-comment', verifyFBToken, async (req, res) => {
-            console.log('clicked');
+            // console.log('clicked');
             const { postId } = req.query;
             const commentData = req.body;
-            console.log(postId, commentData);
+            // console.log(postId, commentData);
             if (!postId) return res.status(400).json({ message: "post id not found" });
             if (!commentData) return res.status(400).json({ message: "comment data not found" });
 
@@ -572,7 +572,7 @@ async function run() {
                         }
                     }
                 );
-                console.log(result);
+                // console.log(result);
                 if (result.modifiedCount === 0) {
                     return res.status(404).json({ message: "comment not found or network error. try again" });
                 }
@@ -628,7 +628,7 @@ async function run() {
         app.post('/add-subjects', verifyFBToken, async (req, res) => {
             const data = req.body;
             const { email } = req.query;
-            console.log(email);
+            // console.log(email);
             if (!data) {
                 return res.status(400).json({ message: "subject data not found" });
             }
@@ -758,10 +758,10 @@ async function run() {
             if (!data) {
                 return res.status(404).json({ message: "subject data not found" });
             }
-            console.log(email, data);
+            // console.log(email, data);
             const oldData = data?.data?.oldData;
             const newData = data?.data?.newData;
-            console.log(oldData, newData);
+            // console.log(oldData, newData);
             if (!oldData) {
                 return res.status(404).json({ message: "subject old data not found" });
             }
@@ -831,11 +831,11 @@ async function run() {
                 return res.status(404).json({ message: "schedule details not found" });
             };
 
-            console.log(email, scheduleDetails.data);
+            // console.log(email, scheduleDetails.data);
             try {
                 const schedules = scheduleDetails.data
                 const existingSchedule = await scheduleCollection.findOne({ email: email });
-                console.log('existing schedule', existingSchedule);
+                // console.log('existing schedule', existingSchedule);
 
                 /**
                  * checking if the user has already a schedule or not
@@ -850,7 +850,7 @@ async function run() {
                             }
                         }
                     );
-                    console.log('result from existing schedule', result);
+                    // console.log('result from existing schedule', result);
                     if (result.modifiedCount < 1) {
                         return res.status(400).json({ message: "schedule update failed" });
                     } else {
@@ -870,7 +870,7 @@ async function run() {
                     }
                     // console.log(data);
                     const result = await scheduleCollection.insertOne(data);
-                    console.log(result);
+                    // console.log(result);
                     if (!result.insertedId) {
                         return res.status(400).json({ message: "schedule add failed" });
                     }
@@ -922,7 +922,7 @@ async function run() {
             if (!scheduleData) {
                 return res.status(404).json({ message: "schedule data not found" });
             }
-            console.log(email, scheduleData);
+            // console.log(email, scheduleData);
             try {
                 const result = await scheduleCollection.updateOne(
                     { email: email },
@@ -937,7 +937,7 @@ async function run() {
                         }
                     }
                 );
-                console.log(result);
+                // console.log(result);
                 if (result.modifiedCount < 1) {
                     return res.status(400).json({ message: "removing schedule failed" });
                 }
@@ -1045,7 +1045,7 @@ async function run() {
                 });
 
                 const aiRawText = result.response.text();
-                console.log("AI Raw Response:", aiRawText);
+                // console.log("AI Raw Response:", aiRawText);
 
                 // Split responses by double newlines
                 const aiResponses = aiRawText.split("\n\n").filter(Boolean);
@@ -1118,9 +1118,8 @@ async function run() {
                     { upsert: true }
                 );
 
-                console.log("result from save progress", result);
+                // console.log("result from save progress", result);
 
-                // ✅ Proper success check
                 if (result.upsertedId || result.modifiedCount > 0) {
                     return res
                         .status(201)
@@ -1167,7 +1166,7 @@ async function run() {
         app.post('/study-plans', verifyFBToken, async (req, res) => {
             const { email } = req.query;
             const plan = req.body;
-            console.log(plan);
+            // console.log(plan);
             if (!email) return res.status(400).json({ message: "user email not found" });
             if (!plan) return res.status(400).json({ message: "plan data not found" });
 
@@ -1218,7 +1217,7 @@ async function run() {
             const { email } = req.query;
             const { id } = req.params;
             const update = req.body;
-            console.log(update);
+            // console.log(update);
             if (!email) return res.status(400).json({ message: "user email not found" });
             if (!id) return res.status(400).json({ message: "plan id not found" });
             if (!update) return res.status(400).json({ message: "updated doc not found" });
@@ -1228,7 +1227,7 @@ async function run() {
                     { _id: new ObjectId(id) },
                     { $set: { ...update, updatedAt: new Date().toISOString() } }
                 );
-                console.log(result);
+                // console.log(result);
                 if (result.modifiedCount > 0) {
                     return res.status(201).json(result);
                 }
@@ -1290,7 +1289,7 @@ async function run() {
                     },
                     { upsert: true }
                 );
-                console.log("result from add income", result);
+                // console.log("result from add income", result);
                 if (result.modifiedCount > 0 || result.upsertedCount > 0) {
                     return res.status(201).json(result);
                 }
@@ -1345,7 +1344,7 @@ async function run() {
                         }
                     }
                 );
-                console.log(result);
+                // console.log(result);
                 if (result.modifiedCount < 1) {
                     return res.status(400).json({ message: "add expense failed" });
                 }
@@ -1395,7 +1394,7 @@ async function run() {
 
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
+        // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
