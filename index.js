@@ -254,6 +254,72 @@ async function run() {
                 res.status(500).json({ message: "internal server error updating user profile" });
             }
 
+        });
+
+        // delete user
+        app.delete('/delete-user', verifyFBToken, async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+
+            try {
+                const deleteUser = await userCollection.deleteOne({ email: email });
+                if (deleteUser.deletedCount === 0) {
+                    return res.status(404).json({ message: "user not found or delete failed" });
+                }
+                res.status(201).json(deleteUser);
+            }
+            catch (err) {
+                console.error('error deleting user', err);
+                res.status(500).json({ message: "internal server error deleting user" });
+            }
+
+        });
+
+        // verify account
+        app.patch('/verify-email', verifyFBToken, async (req, res) => {
+            const { email, isVerified } = req.query;
+            if (!email || !isVerified) {
+                return res.status(400).json({ message: "data query missing" });
+            };
+
+            try {
+                const isVerifiedBool = isVerified === "true";
+                const result = await userCollection.updateOne(
+                    { email: email },
+                    {
+                        $set: {
+                            accountVerified: isVerifiedBool
+                        }
+                    },
+                    { upsert: true }
+                );
+                if (!result.matchedCount) {
+                    return res.status(404).json({ message: "user not found" });
+                }
+                res.status(201).json(result);
+            }
+            catch (err) {
+                console.error("error verifying account", err);
+                res.status(500).json({ message: "internal server error verifying account" });
+            }
+
+        });
+
+        app.get('/check-profile-verified', verifyFBToken, async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.status(400).json({ message: "author email not found" });
+
+            try {
+                const result = await userCollection.findOne({ email: email });
+                if (!result) return res.status(404).json({ message: "no user found with this email" });
+                const isVerified = result?.accountVerified || false;
+                res.status(200).json({isVerified});
+            }
+            catch (err) {
+                console.error("error getting verification info", err);
+                res.status(500).json({ message: "internal server error getting verification info" });
+            }
+
         })
 
 
