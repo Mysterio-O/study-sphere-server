@@ -10,7 +10,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 app.use(express.json());
 app.use(cors({
-    origin:['https://studysphere-mysterio.netlify.app','http://localhost:5173'],
+    origin: ['https://studysphere-mysterio.netlify.app', 'http://localhost:5173'],
     credentials: true
 }));
 
@@ -43,6 +43,8 @@ const quizProgressCollection = db.collection('quizProgress');
 const studyPlannerCollection = db.collection('studyPlanner');
 const walletCollection = db.collection("wallet");
 const postCollection = db.collection('posts');
+const supportCollection = db.collection('support');
+const subscriberCollection = db.collection('subscribers');
 
 
 
@@ -70,6 +72,54 @@ async function run() {
 
 
         }
+
+
+
+        // support api
+        app.post('/send-support-message', async (req, res) => {
+            try {
+                const messageData = req.body;
+                if (!messageData) {
+                    return res.status(400).json({ message: "message data not found" });
+                }
+
+                const result = await supportCollection.insertOne(messageData);
+                if (!result.insertedId) {
+                    return res.status(400).json({ message: "message failed or network error. try again" });
+                }
+
+                res.status(201).json(result);
+
+            }
+            catch (err) {
+                console.error("error posting new message", err);
+                res.status(500).json({ message: "internal server error while sending message" });
+            }
+        });
+
+
+        // subscribe api
+        app.post('/subscribe', async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.status(400).json({ message: "Please provide a valid email address" });
+            try {
+                const subscriberData = {
+                    subscribedEmail: email,
+                    subscribedAt: new Date().toISOString(),
+                    paidMembership: false
+                }
+                const subscribe = await subscriberCollection.insertOne(subscriberData);
+                if (!subscribe.insertedId) {
+                    return res.status(400).json({ message: "subscribe failed. try again" });
+                }
+                res.status(201).json(subscribe);
+            }
+            catch (err) {
+                console.error("error subscribing", err);
+                res.status(500).json({ message: "internal server error while subscribing" });
+            }
+        })
+
 
 
 
@@ -152,6 +202,58 @@ async function run() {
                 console.error('error getting cover image', err);
                 res.status(500).json({ message: "internal server error while getting user cover url" });
             }
+        });
+
+        // get user info
+        app.get('/user-details', verifyFBToken, async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.status(400).json({ message: "user email not found" });
+
+            try {
+                const user = await userCollection.findOne({ email: email });
+                if (!user) return res.status(404).json({ message: "user not found with this email" });
+                res.status(200).json(user);
+            }
+            catch (err) {
+                console.error("error getting user's profile", err);
+                res.status(500).json({ message: "internal server error getting user's profile" });
+            }
+
+        });
+
+        // update profile
+        app.patch("/update-profile", verifyFBToken, async (req, res) => {
+            try {
+                const { email } = req.query;
+                if (!email) return res.status(400).json({ message: "user email not found" });
+                if (!req.body) return res.status(400).json({ message: "updated data not found" });
+                const { username, institutionName, institutionType, classGrade, year, department } = req.body;
+
+                // Build update object only with allowed fields
+                const updateData = {};
+                if (username) updateData.username = username;
+                if (institutionName) updateData.institutionName = institutionName;
+                if (institutionType) updateData.institutionType = institutionType;
+                if (classGrade) updateData.classGrade = classGrade;
+                if (year) updateData.year = year;
+                if (department) updateData.department = department;
+
+                const result = await userCollection.updateOne(
+                    { email },
+                    { $set: updateData }
+                );
+
+                if (result.modifiedCount > 0) {
+                    res.json({ success: true, message: "Profile updated successfully" });
+                } else {
+                    res.json({ success: false, message: "No changes made" });
+                }
+            }
+            catch (err) {
+                console.error("error updating user profile", err);
+                res.status(500).json({ message: "internal server error updating user profile" });
+            }
+
         })
 
 
